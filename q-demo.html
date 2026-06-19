@@ -152,6 +152,22 @@
       font-family: Arial, Helvetica, sans-serif;
     }
 
+    .secret-note {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid #f0d29a;
+      border-radius: 8px;
+      background: #fff8e8;
+      color: #74500c;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    body.student-variant .secret-note {
+      display: block;
+    }
+
     .result {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -258,6 +274,32 @@
       color: var(--ink);
     }
 
+    .chart-legend {
+      display: none;
+      gap: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    body.student-variant .chart-legend {
+      display: flex;
+    }
+
+    .line-key {
+      width: 34px;
+      height: 0;
+      border-top: 4px solid var(--blue);
+      border-radius: 999px;
+    }
+
+    .line-key.original {
+      border-top-color: #9aa8ba;
+      border-top-style: dashed;
+    }
+
     .study-guide {
       margin-top: 24px;
       border-top: 1px solid var(--line);
@@ -351,7 +393,7 @@
 </head>
 <body>
   <main>
-    <h1>FriendlyCore q(c) Demo</h1>
+    <h1 id="pageTitle">FriendlyCore q(c) Demo</h1>
     <p class="subtitle">
       Move the sliders to see how the keep probability depends on the friend count.
       A point with few friends is removed; a point that is friends with everyone is always kept.
@@ -387,14 +429,19 @@
 
         <div class="formula" aria-label="Formula">
           <strong>Simplified q rule</strong>
-          <div>q(c) = 0, if c <= n/2</div>
+          <div id="zeroRule">q(c) = 0, if c <= n/2</div>
           <div>q(c) = 1, if c = n</div>
           <div id="shapeFormula">Linear: q(c) = t between n/2 and n</div>
         </div>
 
+        <div class="secret-note" id="secretNote">
+          This is the modified rule from Question 2(c): the ramp starts earlier,
+          at n/3 instead of n/2. That can keep points with too few friends.
+        </div>
+
         <div class="result">
           <div class="metric">
-            <span>n/2 cutoff</span>
+            <span id="cutoffLabel">n/2 cutoff</span>
             <b id="cutoffValue">5</b>
           </div>
           <div class="metric">
@@ -417,6 +464,10 @@
       <section>
         <div class="chart-wrap">
           <svg id="chart" viewBox="0 0 700 390" role="img" aria-label="Chart of q of c"></svg>
+        </div>
+        <div class="chart-legend">
+          <span class="line-key"></span><span>modified q(c)</span>
+          <span class="line-key original"></span><span>original n/2 rule</span>
         </div>
 
         <p class="explain" id="explainText"></p>
@@ -503,11 +554,24 @@
     const presetButton = document.getElementById("presetButton");
     const shapeFormula = document.getElementById("shapeFormula");
     const shapeInputs = Array.from(document.querySelectorAll("input[name='shape']"));
+    const pageTitle = document.getElementById("pageTitle");
+    const zeroRule = document.getElementById("zeroRule");
+    const cutoffLabel = document.getElementById("cutoffLabel");
+    const secretParams = new URLSearchParams(window.location.search);
+    const isStudentVariant = secretParams.get("variant") === "student" || secretParams.get("q") === "student";
+
+    if (isStudentVariant) {
+      document.body.classList.add("student-variant");
+      document.title = "FriendlyCore q(c) Demo - Student Variant";
+      pageTitle.textContent = "FriendlyCore q(c) Demo: Modified Rule";
+      zeroRule.textContent = "q(c) = 0, if c < n/3";
+      cutoffLabel.textContent = "n/3 cutoff";
+    }
 
     const shapes = {
       linear: {
         label: "Linear",
-        formula: "Linear: q(c) = t between n/2 and n",
+        formula: "Linear: q(c) = t between cutoff and n",
         apply: t => t,
         note: "This is the simplest ramp: each extra friend raises q by the same amount."
       },
@@ -535,7 +599,19 @@
       return document.querySelector("input[name='shape']:checked").value;
     }
 
+    function cutoffFor(n) {
+      return isStudentVariant ? n / 3 : n / 2;
+    }
+
     function q(c, n, shapeName) {
+      const cutoff = cutoffFor(n);
+      if (c <= cutoff) return 0;
+      if (c >= n) return 1;
+      const t = (c - cutoff) / (n - cutoff);
+      return shapes[shapeName].apply(t);
+    }
+
+    function originalQ(c, n, shapeName) {
       const cutoff = n / 2;
       if (c <= cutoff) return 0;
       if (c >= n) return 1;
@@ -573,9 +649,16 @@
       for (let i = 0; i <= n; i++) {
         path.push(`${i === 0 ? "M" : "L"} ${x(i)} ${y(q(i, n, shapeName))}`);
       }
+      if (isStudentVariant) {
+        const originalPath = [];
+        for (let i = 0; i <= n; i++) {
+          originalPath.push(`${i === 0 ? "M" : "L"} ${x(i)} ${y(originalQ(i, n, shapeName))}`);
+        }
+        chart.appendChild(svgEl("path", { d: originalPath.join(" "), fill: "none", stroke: "#9aa8ba", "stroke-width": 3, "stroke-dasharray": "8 7", "stroke-linecap": "round", "stroke-linejoin": "round" }));
+      }
       chart.appendChild(svgEl("path", { d: path.join(" "), fill: "none", stroke: "#3267d6", "stroke-width": 4, "stroke-linecap": "round", "stroke-linejoin": "round" }));
 
-      const cutoffX = x(n / 2);
+      const cutoffX = x(cutoffFor(n));
       chart.appendChild(svgEl("line", { x1: cutoffX, y1: margin.top, x2: cutoffX, y2: margin.top + height, stroke: "#b97300", "stroke-width": 2, "stroke-dasharray": "8 7" }));
 
       const selectedQ = q(c, n, shapeName);
@@ -585,7 +668,7 @@
 
       const labels = [
         ["0", margin.left, margin.top + height + 26],
-        ["n/2", cutoffX, margin.top + height + 26],
+        [isStudentVariant ? "n/3" : "n/2", cutoffX, margin.top + height + 26],
         ["n", margin.left + width, margin.top + height + 26],
         ["q(c)", margin.left - 34, margin.top + 5],
         ["c", margin.left + width + 10, margin.top + height + 5],
@@ -619,19 +702,24 @@
       const shapeName = selectedShape();
       const shape = shapes[shapeName];
       const prob = q(c, n, shapeName);
-      const cutoff = n / 2;
+      const cutoff = cutoffFor(n);
+      const cutoffName = isStudentVariant ? "n/3" : "n/2";
 
       nValue.textContent = n;
       cValue.textContent = c;
       cutoffValue.textContent = cutoff % 1 === 0 ? cutoff.toFixed(0) : cutoff.toFixed(1);
       qValue.textContent = prob.toFixed(2);
       decisionValue.textContent = prob === 0 ? "remove" : prob === 1 ? "keep" : "maybe";
-      shapeFormula.textContent = shape.formula;
+      shapeFormula.textContent = isStudentVariant
+        ? shape.formula.replace("cutoff", "n/3")
+        : shape.formula.replace("cutoff", "n/2");
 
       if (prob === 0) {
-        explainText.textContent = `Because c=${c} is at or below n/2=${cutoff}, this point has too few friends, so q(c)=0 and it is always removed.`;
+        explainText.textContent = `Because c=${c} is at or below ${cutoffName}=${cutoff.toFixed(2)}, this point has too few friends, so q(c)=0 and it is always removed.`;
       } else if (prob === 1) {
         explainText.textContent = `Because c=n=${n}, this point is friends with everyone, so q(c)=1 and it is always kept.`;
+      } else if (isStudentVariant) {
+        explainText.textContent = `Because c=${c} is between ${cutoffName}=${cutoff.toFixed(2)} and n=${n}, the modified rule may keep it with probability q(c)=${prob.toFixed(2)} using the ${shape.label} shape. This earlier ramp is the change studied in Question 2(c).`;
       } else {
         explainText.textContent = `Because c=${c} is between n/2=${cutoff} and n=${n}, the point is kept with probability q(c)=${prob.toFixed(2)} using the ${shape.label} shape. ${shape.note}`;
       }
@@ -658,7 +746,9 @@
       nSlider.value = "10";
       cSlider.max = "10";
       cSlider.value = "3";
-      simLine.textContent = "Outlier preset: only 3 friends out of 10, so q(c)=0.";
+      simLine.textContent = isStudentVariant
+        ? "Modified preset: 3 friends out of 10 is near the new n/3 cutoff."
+        : "Outlier preset: only 3 friends out of 10, so q(c)=0.";
       update();
     });
 
